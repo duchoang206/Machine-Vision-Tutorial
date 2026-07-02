@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time AI Vision Dashboard - DetectRackProject</title>
+    
+    <!-- Google Fonts for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Theme Color Tokens */
+            --bg-dark: hsl(222, 47%, 6%);
+            --bg-panel: rgba(13, 20, 35, 0.75);
+            --border-glow: rgba(255, 255, 255, 0.08);
+            --text-primary: hsl(210, 40%, 98%);
+            --text-muted: hsl(215, 20%, 65%);
+            
+            /* Status Colors (Curated HSL) */
+            --safe-gradient: linear-gradient(135deg, hsl(152, 60%, 20%) 0%, hsl(160, 50%, 12%) 100%);
+            --safe-glow: rgba(16, 185, 129, 0.25);
+            --safe-text: hsl(150, 100%, 75%);
+            
+            --alarm-gradient: linear-gradient(135deg, hsl(350, 65%, 28%) 0%, hsl(360, 55%, 18%) 100%);
+            --alarm-glow: rgba(239, 68, 68, 0.35);
+            --alarm-text: hsl(350, 100%, 80%);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(30, 41, 59, 0.4) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(15, 23, 42, 0.6) 0px, transparent 50%);
+        }
+
+        /* --- Header styling --- */
+        header {
+            width: 100%;
+            padding: 1.25rem 2rem;
+            background: rgba(13, 20, 35, 0.6);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-glow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-logo {
+            width: 2.2rem;
+            height: 2.2rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+            font-size: 1.2rem;
+        }
+
+        .brand-info h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            background: linear-gradient(90deg, #ffffff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-info p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* --- WebSocket Connection Badge --- */
+        .conn-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border-glow);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: all 0.3s ease;
+        }
+
+        .conn-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444; /* Default offline */
+            box-shadow: 0 0 8px #ef4444;
+            transition: all 0.3s ease;
+        }
+
+        .conn-badge.connected {
+            color: hsl(150, 100%, 75%);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .conn-badge.connected .conn-dot {
+            background: #10b981;
+            box-shadow: 0 0 10px #10b981;
+            animation: pulse-green 1.5s infinite;
+        }
+
+        /* --- Main Layout: Side-by-Side --- */
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 2.2fr 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            max-width: 1600px;
+            width: 100%;
+            margin: auto;
+            align-items: stretch;
+        }
+
+        @media (max-width: 1024px) {
+            main {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+                padding: 1rem;
+            }
+        }
+
+        /* --- Left Column: VMS Stream Container --- */
+        .stream-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .stream-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stream-title::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: #3b82f6;
+            border-radius: 50%;
+            box-shadow: 0 0 6px #3b82f6;
+        }
+
+        .stream-container {
+            background: rgba(8, 12, 21, 0.95);
+            border: 1px solid var(--border-glow);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            aspect-ratio: 16/9;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        #camera-stream-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: none; /* Shown only when active */
+        }
+
+        .stream-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            color: var(--text-muted);
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 500;
+            background: radial-gradient(circle, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.9) 100%);
+        }
+
+        .stream-placeholder-icon {
+            width: 48px;
+            height: 48px;
+            border: 3px dashed var(--text-muted);
+            border-radius: 50%;
+            animation: spin 3s linear infinite;
+        }
+
+        /* --- Right Column: Cards --- */
+        .cards-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            justify-content: center;
+        }
+
+        .card {
+            background: var(--bg-panel);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glow);
+            border-radius: 16px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: calc(50% - 0.75rem);
+            min-height: 200px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.15;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* SAFE State */
+        .card.safe {
+            border-color: rgba(16, 185, 129, 0.25);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3), 0 0 15px var(--safe-glow);
+        }
+        .card.safe::before {
+            background: var(--safe-gradient);
+            opacity: 0.15;
+        }
+        
+        /* ALARM State */
+        .card.alarm {
+            border-color: rgba(239, 68, 68, 0.45);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4), 0 0 30px var(--alarm-glow);
+            animation: card-alert-pulse 2s infinite ease-in-out;
+        }
+        .card.alarm::before {
+            background: var(--alarm-gradient);
+            opacity: 0.35;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            z-index: 2;
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .card-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-glow);
+        }
+
+        .card-body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            z-index: 2;
+        }
+
+        .status-text {
+            font-size: 2.2rem;
+            font-weight: 700;
+            transition: color 0.3s ease;
+        }
+        
+        .safe .status-text {
+            color: var(--safe-text);
+            text-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+        }
+        
+        .alarm .status-text {
+            color: var(--alarm-text);
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+            animation: text-pulse 1s infinite alternate;
+        }
+
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            z-index: 2;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 1rem;
+        }
+
+        /* --- Footer --- */
+        footer {
+            width: 100%;
+            padding: 1.5rem;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-glow);
+            background: rgba(13, 20, 35, 0.4);
+            margin-top: auto;
+        }
+
+        /* --- Animations --- */
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        @keyframes card-alert-pulse {
+            0%, 100% { box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4), 0 0 15px rgba(239, 68, 68, 0.35); }
+            50% { box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4), 0 0 30px rgba(239, 68, 68, 0.6); }
+        }
+
+        @keyframes text-pulse {
+            from { opacity: 0.8; }
+            to { opacity: 1; }
+        }
+
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="brand-logo">R</div>
+            <div class="brand-info">
+                <h1>R-SkyView Edge Server Control Panel</h1>
+                <p>Industrial AI Real-Time Monitoring System</p>
+            </div>
+        </div>
+        
+        <div id="connBadge" class="conn-badge">
+            <div class="conn-dot"></div>
+            <span id="connStatusText">OFFLINE</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Left: Real-Time Stream View -->
+        <div class="stream-section">
+            <div class="stream-title">LIVE MONITORING FEED</div>
+            <div class="stream-container">
+                <img id="camera-stream-img" alt="Live vision stream" />
+                <div id="streamPlaceholder" class="stream-placeholder">
+                    <div class="stream-placeholder-icon"></div>
+                    <div>Awaiting Edge AI Live Stream Connection...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Status Cards -->
+        <div class="cards-container">
+            <!-- Card 1 -->
+            <div id="card1" class="card safe">
+                <div class="card-header">
+                    <span class="card-title">ROI ZONE 1</span>
+                    <span class="card-label">Modbus Coil 0</span>
+                </div>
+                <div class="card-body">
+                    <span id="status1" class="status-text">SAFE</span>
+                </div>
+                <div class="card-footer">
+                    <span>Target: Rack detection</span>
+                    <span id="updateTime1">Last Update: --:--:--</span>
+                </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div id="card2" class="card safe">
+                <div class="card-header">
+                    <span class="card-title">ROI ZONE 2</span>
+                    <span class="card-label">Modbus Coil 1</span>
+                </div>
+                <div class="card-body">
+                    <span id="status2" class="status-text">SAFE</span>
+                </div>
+                <div class="card-footer">
+                    <span>Target: Rack detection</span>
+                    <span id="updateTime2">Last Update: --:--:--</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 R-SkyView Industrial Edge Server. Latency optimized design (&lt; 30ms).</p>
+    </footer>
+
+    <script>
+        const connBadge = document.getElementById('connBadge');
+        const connStatusText = document.getElementById('connStatusText');
+        const streamPlaceholder = document.getElementById('streamPlaceholder');
+        
+        const card1 = document.getElementById('card1');
+        const card2 = document.getElementById('card2');
+        const status1 = document.getElementById('status1');
+        const status2 = document.getElementById('status2');
+        const updateTime1 = document.getElementById('updateTime1');
+        const updateTime2 = document.getElementById('updateTime2');
+
+        // Track last alarm states to detect changes
+        let lastAlarmState = {
+            roi_1_alarm: false,
+            roi_2_alarm: false
+        };
+
+        // Garbage collection helper for real-time video stream
+        let currentObjectUrl = null;
+
+        // 1. Thay vì fix cứng IP, dòng này giúp trình duyệt tự bốc IP của máy bạn (192.168.5.101) từ thanh URL
+        const SERVER_IP = window.location.hostname || '127.0.0.1'; 
+
+        // 2. Sửa đường dẫn kết nối WebSocket đến C++ Server chạy ở cổng 8082 (Bắt buộc dùng dấu nháy ngược ` )
+        const wsUrl = `ws://${SERVER_IP}:8082`;
+
+        let socket = null;
+
+        function connectWebSocket() {
+            console.log(`Connecting to WebSocket server at ${wsUrl}...`);
+            socket = new WebSocket(wsUrl);
+
+            // Handle binary frames as Blobs (JPEG files)
+            socket.binaryType = 'blob';
+
+            socket.onopen = () => {
+                connBadge.classList.add('connected');
+                connStatusText.textContent = 'ONLINE';
+                streamPlaceholder.style.display = 'none';
+                document.getElementById('camera-stream-img').style.display = 'block';
+                console.log('Connected to C++ Edge Server.');
+            };
+
+            socket.onmessage = (event) => {
+                if (event.data instanceof Blob) {
+                    // Update live stream image container in memory-safe way
+                    const url = URL.createObjectURL(event.data);
+                    const oldUrl = currentObjectUrl;
+                    
+                    currentObjectUrl = url;
+                    document.getElementById('camera-stream-img').src = url;
+                    
+                    // Revoke old object URL immediately to prevent memory leaks
+                    if (oldUrl) {
+                        URL.revokeObjectURL(oldUrl);
+                    }
+                } else {
+                    // Parse text messages containing alarms JSON
+                    try {
+                        const data = JSON.parse(event.data);
+                        const now = new Date();
+                        const timestamp = now.toTimeString().split(' ')[0];
+
+                        // Process ROI ZONE 1
+                        if (data.roi_1_alarm !== undefined) {
+                            if (data.roi_1_alarm !== lastAlarmState.roi_1_alarm) {
+                                if (data.roi_1_alarm) {
+                                    card1.classList.remove('safe');
+                                    card1.classList.add('alarm');
+                                    status1.textContent = 'ALARM OCCUPIED';
+                                } else {
+                                    card1.classList.remove('alarm');
+                                    card1.classList.add('safe');
+                                    status1.textContent = 'SAFE';
+                                }
+                                lastAlarmState.roi_1_alarm = data.roi_1_alarm;
+                                updateTime1.textContent = `Last Update: ${timestamp}`;
+                            }
+                        }
+
+                        // Process ROI ZONE 2
+                        if (data.roi_2_alarm !== undefined) {
+                            if (data.roi_2_alarm !== lastAlarmState.roi_2_alarm) {
+                                if (data.roi_2_alarm) {
+                                    card2.classList.remove('safe');
+                                    card2.classList.add('alarm');
+                                    status2.textContent = 'ALARM OCCUPIED';
+                                } else {
+                                    card2.classList.remove('alarm');
+                                    card2.classList.add('safe');
+                                    status2.textContent = 'SAFE';
+                                }
+                                lastAlarmState.roi_2_alarm = data.roi_2_alarm;
+                                updateTime2.textContent = `Last Update: ${timestamp}`;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error parsing JSON:', e);
+                    }
+                }
+            };
+
+            socket.onclose = () => {
+                connBadge.classList.remove('connected');
+                connStatusText.textContent = 'OFFLINE';
+                streamPlaceholder.style.display = 'flex';
+                document.getElementById('camera-stream-img').style.display = 'none';
+                console.log('Connection closed. Retrying in 2 seconds...');
+                
+                // Clear old object URL if any
+                if (currentObjectUrl) {
+                    URL.revokeObjectURL(currentObjectUrl);
+                    currentObjectUrl = null;
+                }
+                document.getElementById('camera-stream-img').src = '';
+
+                // Reset cards to safe
+                card1.className = 'card safe';
+                card2.className = 'card safe';
+                status1.textContent = 'NO DATA';
+                status2.textContent = 'NO DATA';
+                lastAlarmState = { roi_1_alarm: false, roi_2_alarm: false };
+
+                setTimeout(connectWebSocket, 2000);
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+            };
+        }
+
+        // Start connection
+        connectWebSocket();
+    </script>
+</body>
+</html>
