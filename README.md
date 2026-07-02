@@ -1,52 +1,340 @@
-# 🚀 Hướng Dẫn Cài Đặt, Vận Hành & Kiến Trúc UML Hệ Thống R-SkyView DetectRack
+# R-SkyView DetectRack
 
-Tài liệu này cung cấp hướng dẫn chi tiết từ các bước thiết lập môi trường, biên dịch mã nguồn C++, quy trình cấu hình mạng, cho đến việc phân tích kiến trúc chuyên sâu của hệ thống **DetectRackProject** thông qua ngôn ngữ mô hình hóa thống nhất (UML).
+Hệ thống phát hiện kệ hàng (rack) công nghiệp theo thời gian thực, chạy trên kiến trúc Edge AI: xử lý AI và hình học ngay tại máy chủ biên đặt trong xưởng, sau đó phân phối dữ liệu tới Web Dashboard và PLC.
 
-Hệ thống hoạt động theo mô hình **Industrial AI Edge-Client**: Máy chủ biên (Edge Server) xử lý các tác vụ nặng (AI & Tính toán hình học) tại biên và phân phối dữ liệu thời gian thực tới giao diện giám sát tĩnh (Web Dashboard) và các thiết bị tự động hóa (PLC).
-
----
-
-## 📑 MỤC LỤC
-1. [Yêu Cầu Hệ Thống (Prerequisites)](#1-yêu-cầu-hệ-thống-prerequisites)
-2. [Cấu Trúc Mã Nguồn Bàn Giao](#2-cấu-trúc-mã-nguồn-bàn-giao)
-3. [Hướng Dẫn Biên Dịch (Build Project)](#3-hướng-dẫn-biên-dịch-build-project)
-4. [Tập Trung Hóa Cấu Hình Hệ Thống (SystemConfig)](#4-tập-trung-hóa-cấu-hình-hệ-thống-systemconfig)
-5. [Hướng Dẫn Vận Hành & Triển Khai Mạng Mới](#5-hướng-dẫn-vận-hành--triển-khai-mạng-mới)
-6. [Phân Tích Sơ Đồ Luồng UML Chi Tiết](#6-phân-tích-sơ-đồ-luồng-uml-chi-tiết)
-7. [Ghi Chú Kỹ Thuật Cho Nhà Phát Triển (Developer Notes)](#7-ghi-chú-kỹ-thuật-cho-nhà-phát-triển-developer-notes)
+**Luồng dữ liệu tổng quát:** Camera IP (RTSP) → Edge Server (C++17, YOLOv8) → WebSocket (Web Dashboard) + Modbus TCP (PLC/SCADA).
 
 ---
 
-## 1. Yêu Cầu Hệ Thống (Prerequisites)
+## Mục lục
 
-### Môi trường phát triển & Biên dịch:
-* **Hệ điều hành:** Windows 10/11 hoặc Linux (Ubuntu 20.04+).
-* **Trình biên dịch:** Hỗ trợ tiêu chuẩn **C++17** (`CMAKE_CXX_STANDARD 17`).
-* **Công cụ build:** CMake (Phiên bản $\geq$ 3.10).
-
-### Các thư viện phụ thuộc bắt buộc (Dependencies):
-1.  **OpenCV (Phiên bản 4.x):** Xử lý luồng hình ảnh camera, tăng cường độ tương phản cục bộ (CLAHE) và mã hóa nén ảnh JPEG.
-2.  **libmodbus:** Xử lý giao thức truyền thông Modbus TCP công nghiệp kết nối tới các thiết bị tự động hóa (PLC/SCADA).
-3.  **ixwebsocket:** Thành phần xử lý truyền tải gói tin WebSocket đa luồng tốc độ cao với độ trễ tối thiểu (< 30ms).
+1. [Yêu cầu hệ thống](#1-yêu-cầu-hệ-thống)
+2. [Cấu trúc mã nguồn](#2-cấu-trúc-mã-nguồn)
+3. [Build project](#3-build-project)
+4. [Cấu hình hệ thống](#4-cấu-hình-hệ-thống)
+5. [Vận hành & triển khai](#5-vận-hành--triển-khai)
+6. [Kiến trúc hệ thống (UML)](#6-kiến-trúc-hệ-thống-uml)
+7. [Ghi chú cho developer](#7-ghi-chú-cho-developer)
 
 ---
 
-## 2. Cấu Trúc Mã Nguồn Bàn Giao
+## 1. Yêu cầu hệ thống
+
+**Môi trường:**
+- Windows 10/11 hoặc Linux (Ubuntu 20.04+)
+- Trình biên dịch hỗ trợ chuẩn C++17
+- CMake ≥ 3.10
+
+**Thư viện phụ thuộc:**
+
+| Thư viện | Vai trò |
+|---|---|
+| OpenCV 4.x | Đọc luồng camera, tăng cường ảnh (CLAHE), mã hóa JPEG |
+| libmodbus | Giao tiếp Modbus TCP với PLC/SCADA |
+| ixwebsocket | Phát luồng WebSocket đa luồng, độ trễ thấp (< 30ms) |
+
+---
+
+## 2. Cấu trúc mã nguồn
 
 ```text
 DetectRackProject/
 ├── cmake/
-│   └── Findlibmodbus.cmake     # Module cấu hình để CMake tìm kiếm thư viện Modbus
+│   └── Findlibmodbus.cmake     # Module CMake để tìm thư viện Modbus
 ├── include/
-│   ├── CameraStream.hpp        # Quản lý luồng Camera RTSP độc lập
-│   ├── RegionMonitor.hpp       # Quản lý và giám sát logic vùng ROI
-│   └── YOLOv8Detector.hpp      # Khởi tạo mô hình và dự đoán bounding boxes
+│   ├── CameraStream.hpp        # Quản lý luồng camera RTSP
+│   ├── RegionMonitor.hpp       # Giám sát logic vùng ROI
+│   └── YOLOv8Detector.hpp      # Khởi tạo model, dự đoán bounding box
 ├── src/
 │   ├── CameraStream.cpp
 │   ├── RegionMonitor.cpp
 │   └── YOLOv8Detector.cpp
 ├── weights/
-│   └── best.onnx               # File trọng số mô hình YOLOv8 đã được tối ưu hóa
-├── CMakeLists.txt              # Cấu hình biên dịch tổng thể hệ thống
-├── main.cpp                    # Điều phối chính (Nạp cấu hình, quản lý đa luồng)
-└── index.html                  # Giao diện Web Dashboard giám sát thời gian thực
+│   └── best.onnx                # Trọng số YOLOv8 đã export ONNX
+├── CMakeLists.txt
+├── main.cpp                     # Điều phối chính, nạp cấu hình, quản lý luồng
+└── index.html                   # Web Dashboard giám sát thời gian thực
+```
+
+---
+
+## 3. Build project
+
+```bash
+mkdir build && cd build
+
+# Cấu hình project
+cmake ..
+
+# Build (dùng Release để tối ưu tốc độ suy diễn AI)
+cmake --build . --config Release
+```
+
+File thực thi `DetectRackProject` sẽ nằm trong `build/` (hoặc `build/Release/` trên Windows).
+
+---
+
+## 4. Cấu hình hệ thống
+
+Toàn bộ tham số mạng, camera và vùng giám sát được gom vào struct `SystemConfig` ở đầu `main.cpp`. Khi triển khai ở xưởng mới, chỉ cần sửa các giá trị trong struct này, không cần đụng vào logic xử lý bên dưới.
+
+```cpp
+struct SystemConfig {
+    // Mạng & giao thức
+    std::string ws_host = "0.0.0.0";     // IP lắng nghe WebSocket
+    int ws_port = 8082;                  // Cổng WebSocket cho Web Dashboard
+
+    std::string modbus_ip = "0.0.0.0";   // IP lắng nghe Modbus TCP
+    int modbus_port = 502;               // Cổng Modbus TCP chuẩn cho PLC
+
+    // Nguồn dữ liệu & model AI
+    std::string video_source = "rtsp://admin:rtc%402025@192.168.5.201:554/...";
+    std::string model_path = "weights/best.onnx";
+
+    // Stream Web (tối ưu băng thông)
+    int stream_width = 960;
+    int stream_height = 540;
+    int jpeg_quality = 70;               // Giảm nếu mạng yếu
+
+    // Tọa độ 4 đỉnh vùng ROI (hình bình hành)
+    std::vector<cv::Point> roi_pts_1 = {
+        cv::Point(1154, 414), cv::Point(1297, 347),
+        cv::Point(1440, 406), cv::Point(1297, 473)
+    };
+    std::vector<cv::Point> roi_pts_2 = {
+        cv::Point(1476, 427), cv::Point(1655, 512),
+        cv::Point(1520, 575), cv::Point(1341, 490)
+    };
+};
+```
+
+---
+
+## 5. Vận hành & triển khai
+
+### 5.1 Chạy Edge AI Server
+
+```bash
+# Cú pháp
+./DetectRackProject "<URL_RTSP_CAMERA>" "<ĐƯỜNG_DẪN_ONNX>"
+
+# Ví dụ
+./DetectRackProject "rtsp://192.168.1.100:554/live" "../weights/best.onnx"
+```
+
+Nếu không truyền tham số, chương trình dùng giá trị mặc định trong `SystemConfig`.
+
+### 5.2 Triển khai Web Dashboard
+
+`index.html` tự lấy IP từ thanh địa chỉ trình duyệt để kết nối ngược vào WebSocket của Edge Server, nên không cần sửa mã nguồn frontend khi đổi mạng.
+
+**Kịch bản A — Cùng mạng LAN xưởng:**
+
+1. Lấy IP nội bộ của máy chạy Edge Server (ví dụ `ipconfig` → `192.168.5.101`).
+2. Tại thư mục chứa `index.html`, mở server tĩnh:
+   ```bash
+   python -m http.server 8000
+   ```
+3. Các máy khác trong mạng truy cập: `http://192.168.5.101:8000`
+
+**Kịch bản B — Giám sát từ xa qua Cloud:**
+
+1. Đẩy `index.html` lên GitHub repository.
+2. Deploy tĩnh qua Vercel hoặc Netlify → nhận link công khai (ví dụ `https://detect-rack-dashboard.vercel.app`).
+3. Port forwarding cổng **8082** (WebSocket) trên router xưởng, trỏ về IP nội bộ của Edge Server, để trang web ngoài Internet kết nối được vào luồng dữ liệu.
+
+---
+
+## 6. Kiến trúc hệ thống (UML)
+
+### 6.1 Sơ đồ thành phần (Component Diagram)
+
+Luồng dữ liệu từ camera vật lý, qua các module xử lý trong Edge Server, đến các client tiêu thụ dữ liệu.
+
+```mermaid
+flowchart LR
+    Cam(["📷 RTSP IP Camera"])
+
+    subgraph Edge["🖥️ Edge AI Server — C++17 Backend"]
+        direction TB
+        CamMod["CameraStream<br/><i>đọc & giải mã khung hình</i>"]
+        AIMod["YOLOv8Detector<br/><i>suy diễn AI, bounding box</i>"]
+        ROIMod["RegionMonitor<br/><i>kiểm tra giao cắt ROI</i>"]
+        WSMod["WebSocket Server<br/>:8082"]
+        MBMod["Modbus TCP Server<br/>:502"]
+
+        CamMod -- "shared frame buffer" --> AIMod
+        AIMod -- "danh sách Detection" --> ROIMod
+        ROIMod -- "JSON + JPEG (30 FPS)" --> WSMod
+        ROIMod -- "ghi Alarm Coil" --> MBMod
+    end
+
+    subgraph Clients["🌐 External Clients"]
+        direction TB
+        WebClient["Web Dashboard"]
+        PLC["PLC / SCADA"]
+    end
+
+    Cam -- "H.264 / H.265 stream" --> CamMod
+    WSMod -. "WebSocket" .-> WebClient
+    MBMod -. "Modbus TCP" .-> PLC
+
+    style Edge fill:#eef4ff,stroke:#5b7fdb,stroke-width:1.5px
+    style Clients fill:#f4f4f4,stroke:#999,stroke-width:1.5px
+    style Cam fill:#fff3d6,stroke:#d6a326
+```
+
+Ảnh thô từ camera đi qua `CameraStream`, sau đó `YOLOv8Detector` nhận diện vật thể và chuyển tọa độ cho `RegionMonitor` tính giao cắt hình học. Kết quả tách thành hai kênh độc lập: WebSocket cho giao diện Web và Modbus TCP cho PLC.
+
+### 6.2 Sơ đồ lớp (Class Diagram)
+
+```mermaid
+classDiagram
+    class SystemConfig {
+        +string ws_host
+        +int ws_port
+        +string modbus_ip
+        +int modbus_port
+        +string video_source
+        +string model_path
+        +int stream_width
+        +int stream_height
+        +int jpeg_quality
+        +vector~Point~ roi_pts_1
+        +vector~Point~ roi_pts_2
+    }
+
+    class CameraStream {
+        -string videoSource
+        -VideoCapture cap
+        +CameraStream(string source)
+        +bool start()
+        +bool retrieveFrame(Mat& frame)
+        +void stop()
+    }
+
+    class YOLOv8Detector {
+        -string modelPath
+        -Size inputSize
+        -float confThreshold
+        -float nmsThreshold
+        -Net net
+        +YOLOv8Detector(string path, Size size, float conf, float nms)
+        +bool loadModel()
+        +vector~Detection~ detect(Mat& frame)
+    }
+
+    class Detection {
+        +Rect box
+        +float confidence
+        +int classId
+    }
+
+    class RegionMonitor {
+        -vector~Point~ polygon
+        -bool isOccupied
+        +void setROI(vector~Point~ pts)
+        +bool checkIntersection(vector~Detection~ detections)
+        +void handleMouseCallback(int event, int x, int y, int flags)
+    }
+
+    class main {
+        <<entry point>>
+    }
+
+    main ..> SystemConfig : đọc cấu hình
+    main --> CameraStream : quản lý vòng đời
+    main --> YOLOv8Detector : điều phối suy diễn
+    main --> RegionMonitor : khởi tạo ROI 1 & 2
+    YOLOv8Detector ..> Detection : tạo ra
+    RegionMonitor ..> Detection : đánh giá va chạm
+```
+
+`SystemConfig` giữ toàn bộ tham số tĩnh; `main()` điều phối vòng đời của `CameraStream`, `YOLOv8Detector` và `RegionMonitor`; `Detection` là đối tượng dữ liệu trung gian truyền giữa các module.
+
+### 6.3 Sơ đồ trình tự khởi động & đa luồng (Sequence Diagram)
+
+Hệ thống chạy 4 luồng song song độc lập để tránh nghẽn cổ chai giữa xử lý AI và truyền mạng.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Eng as Kỹ sư vận hành
+    participant Main as main()<br/>Thread 0
+    participant Cfg as SystemConfig
+    participant Cam as CameraStream<br/>Thread 1
+    participant AI as YOLOv8Detector<br/>Thread 2
+    participant WS as WebSocket Server<br/>Thread 3
+    participant MB as Modbus TCP<br/>Thread 4
+
+    Eng->>Main: Chạy ứng dụng
+    Main->>Cfg: Nạp cấu hình
+    Cfg-->>Main: OK
+
+    Main->>Cam: start()
+    Cam-->>Main: Kết nối RTSP thành công
+
+    Main->>AI: loadModel()
+    AI-->>Main: Nạp ONNX hoàn tất
+
+    rect rgb(238, 244, 255)
+    Note over Main,MB: Khởi chạy song song 4 luồng
+    Main->>Cam: Thread 1 — đọc & drop frame vào buffer
+    Main->>AI: Thread 2 — CLAHE + YOLOv8 + tính ROI
+    Main->>WS: Thread 3 — nén JPEG + phát JSON qua :8082
+    Main->>MB: Thread 4 — lắng nghe :502, phục vụ PLC
+    end
+
+    Main->>Main: Vòng lặp GUI OpenCV cục bộ (Thread 0)
+```
+
+Bước 1–7 là khởi tạo và kiểm tra an toàn (camera, model). Sau đó `main()` đẩy 4 tác vụ vào 4 luồng CPU độc lập chạy `while(g_running)`, giúp tốc độ AI không phụ thuộc vào tốc độ truyền mạng.
+
+### 6.4 Sơ đồ trạng thái vùng giám sát (State Diagram)
+
+```mermaid
+stateDiagram-v2
+    [*] --> INITIALIZING
+    INITIALIZING --> SAFE : Camera OK + Intersection ≤ 40%
+
+    SAFE --> ALARM_OCCUPIED : Rack đặt vào vùng<br/>(Intersection > 40%)
+    note right of ALARM_OCCUPIED
+        Kích hoạt 1 lần duy nhất khi chuyển trạng thái:
+        • Log "[SERVER REPORT]" ra terminal
+        • Gửi JSON báo động qua WebSocket
+        • Ghi Modbus Coil = 1
+    end note
+
+    ALARM_OCCUPIED --> SAFE : Rack được di dời khỏi vùng
+    note right of SAFE
+        Reset trạng thái:
+        • Log hủy sự kiện ra terminal
+        • Gửi JSON cập nhật SAFE qua WebSocket
+        • Ghi Modbus Coil = 0
+    end note
+
+    SAFE --> [*] : Dừng chương trình (q / Esc)
+    ALARM_OCCUPIED --> [*] : Dừng chương trình (q / Esc)
+```
+
+Ngưỡng giao cắt được tính bằng `intersectConvexConvex` giữa đa giác ROI và bounding box. Khi tỷ lệ diện tích giao vượt **40%**, hệ thống chuyển từ `SAFE` sang `ALARM_OCCUPIED`. Cơ chế event-driven đảm bảo cảnh báo chỉ phát sinh đúng 1 lần tại thời điểm chuyển trạng thái, tránh spam băng thông và CPU.
+
+---
+
+## 7. Ghi chú cho developer
+
+**Lấy tọa độ ROI mới bằng chuột:**
+Chương trình có sẵn mouse listener trên cửa sổ OpenCV. Kéo chuột trái để vẽ vùng thử, tọa độ `cv::Rect(x, y, w, h)` sẽ in ra terminal — dùng giá trị này để cập nhật `roi_pts_1` / `roi_pts_2`.
+
+**Firewall:**
+Nếu Dashboard báo `OFFLINE` dù server đang chạy, kiểm tra và mở Inbound Rules cho các cổng:
+- `8000` — HTTP server giao diện web
+- `8082` — WebSocket stream hình ảnh
+- `502` — Modbus TCP tới PLC
+
+**Bộ nhớ trình duyệt:**
+`index.html` gọi `URL.revokeObjectURL()` sau mỗi lần render frame mới, tránh memory leak khi Dashboard chạy liên tục 24/7.
+
+---
+
+*R-SkyView Industrial AI Vision — Edge Server v1.0.0*
