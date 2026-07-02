@@ -1,4 +1,4 @@
-# R-SkyView DetectRack
+#  DetectRack
 
 Hệ thống phát hiện kệ hàng (rack) công nghiệp theo thời gian thực, chạy trên kiến trúc Edge AI: xử lý AI và hình học ngay tại máy chủ biên đặt trong xưởng, sau đó phân phối dữ liệu tới Web Dashboard và PLC.
 
